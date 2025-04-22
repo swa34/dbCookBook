@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Search Results - DB Cookbook</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        .search-highlight {
+            background-color: rgba(255, 255, 0, 0.3);
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        .search-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .result-card {
+            transition: transform 0.2s;
+        }
+
+        .result-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .result-icon-table {
+            color: #0d6efd;
+        }
+
+        .result-icon-view {
+            color: #198754;
+        }
+
+        .result-icon-column {
+            color: #6c757d;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-server"></i> DB Cookbook
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Databases</a>
+                    </li>
+                </ul>
+                <form class="d-flex ms-auto" action="/search" method="get">
+                    <div class="input-group">
+                        <input type="text" name="q" class="form-control" placeholder="Search all databases..."
+                            value="{{ query|e }}" aria-label="Search">
+                        <button class="btn btn-outline-primary" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="mb-4">
+            <h1>Search Results</h1>
+            <p class="text-muted">
+                {% if results|length > 0 %}
+                Found {{ results|length }} result{% if results|length != 1 %}s{% endif %} for "{{ query }}"
+                {% else %}
+                No results found for "{{ query }}"
+                {% endif %}
+            </p>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ error }}
+        </div>
+        {% endif %}
+
+        {% if results|length == 0 and not error %}
+        <div class="py-5 text-center">
+            <i class="bi bi-search text-secondary" style="font-size: 3rem;"></i>
+            <p class="lead mt-3">No matching database objects found.</p>
+            <p class="text-muted">Try using different search terms or check your spelling.</p>
+        </div>
+        {% endif %}
+
+        <div class="row">
+            {% for result in results %}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card result-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-2">
+                            {% if result.obj_type == 'Table' %}
+                            <i class="bi bi-table result-icon-table me-2" style="font-size: 1.5rem;"></i>
+                            {% elif result.obj_type == 'View' %}
+                            <i class="bi bi-eye result-icon-view me-2" style="font-size: 1.5rem;"></i>
+                            {% elif result.obj_type == 'Column' %}
+                            <i class="bi bi-list-columns result-icon-column me-2" style="font-size: 1.5rem;"></i>
+                            {% endif %}
+
+                            <h5 class="card-title mb-0">
+                                {% if result.obj_type == 'Column' %}
+                                <span class="text-muted">{{ result.column }}</span> in {{ result.name }}
+                                {% else %}
+                                {{ result.name }}
+                                {% endif %}
+                            </h5>
+                        </div>
+
+                        <div class="mb-3">
+                            <span class="badge bg-secondary">{{ result.obj_type }}</span>
+                            <small class="text-muted ms-2">{{ result.database }}.{{ result.schema }}</small>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-3">
+                            {% if result.obj_type == 'Column' %}
+                            <a href="/details/{{ result.database }}/{{ result.schema }}/{{ result.name }}"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-table"></i> View Table Details
+                            </a>
+                            {% else %}
+                            <a href="/details/{{ result.database }}/{{ result.schema }}/{{ result.name }}"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-info-circle"></i> View Details
+                            </a>
+                            {% endif %}
+
+                            <a href="/database/{{ result.database }}/schema/{{ result.schema }}"
+                                class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-folder"></i> View Schema
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <footer class="footer mt-auto py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">DB Cookbook - A database exploration tool</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

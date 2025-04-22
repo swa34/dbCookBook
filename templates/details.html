@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ obj.schema }}.{{ obj.name }} - DB Cookbook</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        .table-sm td,
+        .table-sm th {
+            padding: 0.5rem;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.25em 0.5em;
+            border-radius: 0.25rem;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 0.5em;
+        }
+
+        .tag-pk {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .tag-fk {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .tag-nullable {
+            background-color: #f3f4f6;
+            color: #6b7280;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        .code-container {
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            opacity: 0.7;
+        }
+
+        .copy-btn:hover {
+            opacity: 1;
+        }
+
+        .type-badge {
+            display: inline-block;
+            font-size: 0.75em;
+            padding: 0.25em 0.5em;
+            border-radius: 0.25rem;
+            margin-right: 0.5em;
+            color: #fff;
+            background-color: #6c757d;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-server"></i> DB Cookbook
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid my-4">
+        <div class="row">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item">{{ obj.database }}</li>
+                        <li class="breadcrumb-item">{{ obj.schema }}</li>
+                        <li class="breadcrumb-item active">{{ obj.name }}</li>
+                    </ol>
+                </nav>
+
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1>
+                        {% if obj.obj_type == 'Table' %}
+                        <i class="bi bi-table text-primary"></i>
+                        {% else %}
+                        <i class="bi bi-eye text-success"></i>
+                        {% endif %}
+                        {{ obj.schema }}.{{ obj.name }}
+                        <span class="badge bg-secondary fs-6">{{ obj.obj_type }}</span>
+                    </h1>
+
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm view-data" data-db="{{ obj.database }}"
+                            data-schema="{{ obj.schema }}" data-table="{{ obj.name }}">
+                            <i class="bi bi-table"></i> View Data
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" id="generate-code-btn">
+                            <i class="bi bi-code-slash"></i> Generate Code
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Columns -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <i class="bi bi-columns-gap"></i> Columns
+                                <span class="badge bg-secondary">{{ obj.columns|length }}</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Nullable</th>
+                                            <th>Default</th>
+                                            <th>Attributes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for col in obj.column_details %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ col.name }}</strong>
+
+                                                {% if obj.primary_key and col.name in obj.primary_key %}
+                                                <span class="tag tag-pk">PK</span>
+                                                {% endif %}
+
+                                                {% if obj.obj_type == 'Table' and obj.foreign_keys %}
+                                                {% for fk in obj.foreign_keys %}
+                                                {% if fk.column == col.name %}
+                                                <span class="tag tag-fk">FK</span>
+                                                {% endif %}
+                                                {% endfor %}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {{ col.type }}
+                                                {% if col.length %}
+                                                ({{ col.length }})
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if col.nullable == 'YES' %}
+                                                <i class="bi bi-check-circle-fill text-success"></i>
+                                                {% else %}
+                                                <i class="bi bi-x-circle-fill text-danger"></i>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if col.default %}
+                                                <code>{{ col.default }}</code>
+                                                {% else %}
+                                                <span class="text-muted">&mdash;</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if obj.primary_key and col.name in obj.primary_key %}
+                                                <span class="badge bg-danger">Primary Key</span>
+                                                {% endif %}
+
+                                                {% if col.nullable == 'YES' %}
+                                                <span class="badge bg-secondary">Nullable</span>
+                                                {% endif %}
+
+                                                {% if obj.obj_type == 'Table' and obj.foreign_keys %}
+                                                {% for fk in obj.foreign_keys %}
+                                                {% if fk.column == col.name %}
+                                                <a href="/details/{{ obj.database }}/{{ fk.referenced_table.split('.')[0] }}/{{ fk.referenced_table.split('.')[1] }}"
+                                                    class="badge bg-primary text-decoration-none">
+                                                    FK: {{ fk.referenced_table }}.{{ fk.referenced_column }}
+                                                </a>
+                                                {% endif %}
+                                                {% endfor %}
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Definition/View Definition -->
+                        {% if obj.obj_type == 'View' and obj.view_definition %}
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <i class="bi bi-code-square"></i> View Definition
+                            </div>
+                            <div class="card-body">
+                                <div class="code-container">
+                                    <button class="btn btn-sm btn-outline-secondary copy-btn"
+                                        data-text="{{ obj.view_definition }}">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                    <pre><code>{{ obj.view_definition }}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <!-- Database Info -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <i class="bi bi-info-circle"></i> Object Information
+                            </div>
+                            <div class="card-body">
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">Database</dt>
+                                    <dd class="col-sm-8">{{ obj.database }}</dd>
+
+                                    <dt class="col-sm-4">Schema</dt>
+                                    <dd class="col-sm-8">{{ obj.schema }}</dd>
+
+                                    <dt class="col-sm-4">Name</dt>
+                                    <dd class="col-sm-8">{{ obj.name }}</dd>
+
+                                    <dt class="col-sm-4">Type</dt>
+                                    <dd class="col-sm-8">{{ obj.obj_type }}</dd>
+
+                                    <dt class="col-sm-4">Columns</dt>
+                                    <dd class="col-sm-8">{{ obj.columns|length }}</dd>
+
+                                    {% if obj.obj_type == 'Table' %}
+                                    <dt class="col-sm-4">Primary Key</dt>
+                                    <dd class="col-sm-8">
+                                        {% if obj.primary_key %}
+                                        {{ obj.primary_key|join(', ') }}
+                                        {% else %}
+                                        <span class="text-muted">&mdash;</span>
+                                        {% endif %}
+                                    </dd>
+
+                                    <dt class="col-sm-4">Foreign Keys</dt>
+                                    <dd class="col-sm-8">
+                                        {% if obj.foreign_keys %}
+                                        {{ obj.foreign_keys|length }}
+                                        {% else %}
+                                        <span class="text-muted">&mdash;</span>
+                                        {% endif %}
+                                    </dd>
+                                    {% endif %}
+                                </dl>
+                            </div>
+                        </div>
+
+                        <!-- Foreign Keys -->
+                        {% if obj.obj_type == 'Table' and obj.foreign_keys %}
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <i class="bi bi-diagram-3"></i> Foreign Keys
+                            </div>
+                            <div class="list-group list-group-flush">
+                                {% for fk in obj.foreign_keys %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="small text-muted">{{ fk.constraint }}</div>
+                                            <strong>{{ fk.column }}</strong>
+                                        </div>
+                                        <div class="text-end">
+                                            <i class="bi bi-arrow-right text-muted"></i>
+                                        </div>
+                                        <div>
+                                            <a href="/details/{{ obj.database }}/{{ fk.referenced_table.split('.')[0] }}/{{ fk.referenced_table.split('.')[1] }}"
+                                                class="text-decoration-none">
+                                                <strong>{{ fk.referenced_table }}</strong>
+                                            </a>
+                                            <div class="small text-muted">{{ fk.referenced_column }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Code Snippets -->
+                        <div class="card mb-4" id="code-snippets" style="display: none;">
+                            <div class="card-header">
+                                <i class="bi bi-code-slash"></i> Code Snippets
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <select class="form-select form-select-sm" id="language-selector">
+                                        <option value="sql">SQL</option>
+                                        <option value="csharp">C#</option>
+                                        <option value="python">Python</option>
+                                        <option value="java">Java</option>
+                                    </select>
+                                </div>
+
+                                <div class="code-container">
+                                    <button class="btn btn-sm btn-outline-secondary copy-btn" id="snippet-copy-btn">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                    <pre><code id="code-snippet-content"></code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Preview Modal -->
+    <div class="modal fade" id="dataModal" tabindex="-1" aria-labelledby="dataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dataModalLabel">Data Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="data-preview-content">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading data...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Data Preview Modal
+        const dataModal = document.getElementById('dataModal');
+        const bsDataModal = new bootstrap.Modal(dataModal);
+
+        document.querySelector('.view-data').addEventListener('click', function () {
+            const db = this.dataset.db;
+            const schema = this.dataset.schema;
+            const table = this.dataset.table;
+
+            document.getElementById('dataModalLabel').textContent = `Data Preview: ${schema}.${table}`;
+            const previewContainer = dataModal.querySelector('.data-preview-content');
+            previewContainer.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading data...</p>
+                </div>
+            `;
+
+            bsDataModal.show();
+
+            fetch(`/api/sample-data/${db}/${schema}/${table}?limit=10`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        previewContainer.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle-fill"></i> 
+                                Error loading data: ${data.error}
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    if (!data.columns || !data.data || data.data.length === 0) {
+                        previewContainer.innerHTML = `
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle-fill"></i> 
+                                No data available or empty table.
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    let tableHtml = `
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        ${data.columns.map(col => `<th>${col}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    data.data.forEach(row => {
+                        tableHtml += '<tr>';
+                        data.columns.forEach(col => {
+                            const value = row[col] === null ? '<em class="text-muted">NULL</em>' : row[col];
+                            tableHtml += `<td>${value}</td>`;
+                        });
+                        tableHtml += '</tr>';
+                    });
+
+                    tableHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-2 small text-muted">
+                            <i class="bi bi-info-circle"></i> Showing up to 10 rows. 
+                        </div>
+                    `;
+
+                    previewContainer.innerHTML = tableHtml;
+                })
+                .catch(error => {
+                    previewContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill"></i> 
+                            Error: ${error.message}
+                        </div>
+                    `;
+                });
+        });
+
+        // Copy buttons
+        document.querySelectorAll('.copy-btn').forEach(button => {
+            button.addEventListener('click', function () {
+                const text = this.dataset.text;
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalHTML = this.innerHTML;
+                    this.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+                    setTimeout(() => {
+                        this.innerHTML = originalHTML;
+                    }, 2000);
+                });
+            });
+        });
+
+        // Code generation
+        document.getElementById('generate-code-btn').addEventListener('click', function () {
+            const codeSnippets = document.getElementById('code-snippets');
+            codeSnippets.style.display = 'block';
+
+            generateCodeSnippet('sql');
+
+            // Scroll to code snippets
+            codeSnippets.scrollIntoView({ behavior: 'smooth' });
+        });
+
+        document.getElementById('language-selector').addEventListener('change', function () {
+            generateCodeSnippet(this.value);
+        });
+
+        function generateCodeSnippet(language) {
+            const obj = {
+                database: '{{ obj.database }}',
+                schema: '{{ obj.schema }}',
+                name: '{{ obj.name }}',
+                type: '{{ obj.obj_type }}',
+                columns: [
+                    {% for col in obj.column_details %}
+            {
+                name: '{{ col.name }}',
+                    type: '{{ col.type }}',
+                        nullable: '{{ col.nullable }}',
+                        default: '{{ col.default|default("") }}'
+            } {% if not loop.last %}, {% endif %}
+            {% endfor %}
+                ],
+            primaryKey: [{% for pk in obj.primary_key %} '{{ pk }}'{% if not loop.last %}, {% endif %} {% endfor %}],
+        foreignKeys: [
+            {% if obj.foreign_keys %}
+        {% for fk in obj.foreign_keys %}
+        {
+            column: '{{ fk.column }}',
+                referencedTable: '{{ fk.referenced_table }}',
+                    referencedColumn: '{{ fk.referenced_column }}'
+        } {% if not loop.last %}, {% endif %}
+        {% endfor %}
+        {% endif %}
+                ]
+            };
+
+        let snippet = '';
+
+        switch (language) {
+            case 'sql':
+                if (obj.type === 'Table') {
+                    snippet = `-- Select all from ${obj.schema}.${obj.name}\nSELECT * FROM [${obj.schema}].[${obj.name}];\n\n`;
+
+                    // Where clause with primary key
+                    if (obj.primaryKey && obj.primaryKey.length > 0) {
+                        snippet += `-- Select by primary key\nSELECT * FROM [${obj.schema}].[${obj.name}]\nWHERE `;
+                        obj.primaryKey.forEach((pk, i) => {
+                            if (i > 0) snippet += " AND ";
+                            snippet += `[${pk}] = @${pk}`;
+                        });
+                        snippet += ";\n\n";
+                    }
+
+                    // Insert statement
+                    snippet += `-- Insert\nINSERT INTO [${obj.schema}].[${obj.name}] (\n`;
+                    obj.columns.forEach((col, i) => {
+                        snippet += `    [${col.name}]${i < obj.columns.length - 1 ? ',' : ''}\n`;
+                    });
+
+                    snippet += ") VALUES (\n";
+                    obj.columns.forEach((col, i) => {
+                        snippet += `    @${col.name}${i < obj.columns.length - 1 ? ',' : ''}\n`;
+                    });
+                    snippet += ");\n\n";
+
+                    // Update statement
+                    if (obj.primaryKey && obj.primaryKey.length > 0) {
+                        snippet += `-- Update\nUPDATE [${obj.schema}].[${obj.name}]\nSET\n`;
+
+                        const nonPkColumns = obj.columns.filter(c => !obj.primaryKey.includes(c.name));
+                        nonPkColumns.forEach((col, i) => {
+                            snippet += `    [${col.name}] = @${col.name}${i < nonPkColumns.length - 1 ? ',' : ''}\n`;
+                        });
+
+                        snippet += "WHERE ";
+                        obj.primaryKey.forEach((pk, i) => {
+                            if (i > 0) snippet += " AND ";
+                            snippet += `[${pk}] = @${pk}`;
+                        });
+                        snippet += ";\n\n";
+                    }
+
+                    // Delete statement
+                    if (obj.primaryKey && obj.primaryKey.length > 0) {
+                        snippet += `-- Delete\nDELETE FROM [${obj.schema}].[${obj.name}]\nWHERE `;
+                        obj.primaryKey.forEach((pk, i) => {
+                            if (i > 0) snippet += " AND ";
+                            snippet += `[${pk}] = @${pk}`;
+                        });
+                        snippet += ";\n";
+                    }
+                } else if (obj.type === 'View') {
+                    snippet = `-- Select all from view ${obj.schema}.${obj.name}\nSELECT * FROM [${obj.schema}].[${obj.name}];\n`;
+                }
+                break;
+
+            case 'csharp':
+                // C# model class
+                snippet = `// ${obj.schema}.${obj.name} model class\n`;
+                snippet += `public class ${obj.name}\n{\n`;
+
+                obj.columns.forEach(col => {
+                    let csharpType = "string";
+
+                    // Map SQL types to C# types
+                    switch (col.type.toLowerCase()) {
+                        case 'int':
+                        case 'bigint':
+                        case 'smallint':
+                        case 'tinyint':
+                            csharpType = "int";
+                            break;
+                        case 'decimal':
+                        case 'numeric':
+                        case 'money':
+                        case 'smallmoney':
+                            csharpType = "decimal";
+                            break;
+                        case 'float':
+                        case 'real':
+                            csharpType = "double";
+                            break;
+                        case 'datetime':
+                        case 'datetime2':
+                        case 'date':
+                        case 'smalldatetime':
+                            csharpType = "DateTime";
+                            break;
+                        case 'bit':
+                            csharpType = "bool";
+                            break;
+                        case 'uniqueidentifier':
+                            csharpType = "Guid";
+                            break;
+                    }
+
+                    // Add nullable types for nullable columns
+                    if (col.nullable === 'YES' && csharpType !== "string") {
+                        csharpType += "?";
+                    }
+
+                    // Add property with attributes
+                    if (obj.primaryKey && obj.primaryKey.includes(col.name)) {
+                        snippet += `    [Key]\n`;
+                    }
+
+                    for (const fk of obj.foreignKeys || []) {
+                        if (fk.column === col.name) {
+                            const refTableName = fk.referencedTable.split('.')[1];
+                            snippet += `    [ForeignKey("${refTableName}")]\n`;
+                        }
+                    }
+
+                    snippet += `    public ${csharpType} ${col.name} { get; set; }\n`;
+                });
+
+                // Add navigation properties for foreign keys
+                if (obj.foreignKeys && obj.foreignKeys.length > 0) {
+                    snippet += "\n    // Navigation properties\n";
+
+                    for (const fk of obj.foreignKeys) {
+                        const refTableName = fk.referencedTable.split('.')[1];
+                        snippet += `    public virtual ${refTableName} ${refTableName} { get; set; }\n`;
+                    }
+                }
+
+                snippet += "}\n";
+                break;
+
+            case 'python':
+                // Python SQLAlchemy model
+                snippet = `# ${obj.schema}.${obj.name} SQLAlchemy model\n`;
+                snippet += `from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Float, Numeric\n`;
+                snippet += `from sqlalchemy.ext.declarative import declarative_base\n`;
+                snippet += `from sqlalchemy.orm import relationship\n\n`;
+                snippet += `Base = declarative_base()\n\n`;
+                snippet += `class ${obj.name}(Base):\n`;
+                snippet += `    __tablename__ = '${obj.name}'\n`;
+                snippet += `    __table_args__ = {'schema': '${obj.schema}'}\n\n`;
+
+                obj.columns.forEach(col => {
+                    let pythonType = "String";
+                    let extraParams = [];
+
+                    // Map SQL types to SQLAlchemy types
+                    switch (col.type.toLowerCase()) {
+                        case 'int':
+                        case 'bigint':
+                        case 'smallint':
+                        case 'tinyint':
+                            pythonType = "Integer";
+                            break;
+                        case 'decimal':
+                        case 'numeric':
+                        case 'money':
+                        case 'smallmoney':
+                            pythonType = "Numeric";
+                            break;
+                        case 'float':
+                        case 'real':
+                            pythonType = "Float";
+                            break;
+                        case 'datetime':
+                        case 'datetime2':
+                        case 'date':
+                        case 'smalldatetime':
+                            pythonType = "DateTime";
+                            break;
+                        case 'bit':
+                            pythonType = "Boolean";
+                            break;
+                    }
+
+                    // Add primary key
+                    if (obj.primaryKey && obj.primaryKey.includes(col.name)) {
+                        extraParams.push("primary_key=True");
+                    }
+
+                    // Add foreign key
+                    for (const fk of obj.foreignKeys || []) {
+                        if (fk.column === col.name) {
+                            extraParams.push(`ForeignKey('${fk.referencedTable}.${fk.referencedColumn}')`);
+                        }
+                    }
+
+                    // Add nullable
+                    if (col.nullable !== 'YES') {
+                        extraParams.push("nullable=False");
+                    }
+
+                    snippet += `    ${col.name} = Column(${pythonType}`;
+
+                    if (extraParams.length > 0) {
+                        snippet += `, ${extraParams.join(', ')}`;
+                    }
+
+                    snippet += `)\n`;
+                });
+
+                // Add relationships
+                if (obj.foreignKeys && obj.foreignKeys.length > 0) {
+                    snippet += "\n    # Relationships\n";
+
+                    for (const fk of obj.foreignKeys) {
+                        const refTableName = fk.referencedTable.split('.')[1];
+                        snippet += `    ${refTableName.toLowerCase()} = relationship('${refTableName}')\n`;
+                    }
+                }
+                break;
+
+            case 'java':
+                // Java JPA entity
+                snippet = `// ${obj.schema}.${obj.name} JPA entity\n`;
+                snippet += `import javax.persistence.*;\n`;
+                snippet += `import java.util.Date;\n`;
+                snippet += `import java.math.BigDecimal;\n\n`;
+
+                snippet += `@Entity\n`;
+                snippet += `@Table(name = "${obj.name}", schema = "${obj.schema}")\n`;
+                snippet += `public class ${obj.name} {\n\n`;
+
+                obj.columns.forEach(col => {
+                    let javaType = "String";
+
+                    // Map SQL types to Java types
+                    switch (col.type.toLowerCase()) {
+                        case 'int':
+                        case 'bigint':
+                        case 'smallint':
+                        case 'tinyint':
+                            javaType = "Integer";
+                            break;
+                        case 'decimal':
+                        case 'numeric':
+                        case 'money':
+                        case 'smallmoney':
+                            javaType = "BigDecimal";
+                            break;
+                        case 'float':
+                        case 'real':
+                            javaType = "Double";
+                            break;
+                        case 'datetime':
+                        case 'datetime2':
+                        case 'date':
+                        case 'smalldatetime':
+                            javaType = "Date";
+                            break;
+                        case 'bit':
+                            javaType = "Boolean";
+                            break;
+                        case 'uniqueidentifier':
+                            javaType = "UUID";
+                            break;
+                    }
+
+                    // Add annotations
+                    if (obj.primaryKey && obj.primaryKey.includes(col.name)) {
+                        snippet += `    @Id\n`;
+                        snippet += `    @GeneratedValue(strategy = GenerationType.IDENTITY)\n`;
+                    }
+
+                    for (const fk of obj.foreignKeys || []) {
+                        if (fk.column === col.name) {
+                            snippet += `    @ManyToOne\n`;
+                            snippet += `    @JoinColumn(name = "${col.name}", referencedColumnName = "${fk.referencedColumn}")\n`;
+                        }
+                    }
+
+                    snippet += `    @Column(name = "${col.name}"`;
+
+                    if (col.nullable !== 'YES') {
+                        snippet += `, nullable = false`;
+                    }
+
+                    snippet += `)\n`;
+                    snippet += `    private ${javaType} ${col.name.charAt(0).toLowerCase() + col.name.slice(1)};\n\n`;
+                });
+
+                // Add getters and setters (simplified)
+                snippet += `    // Getters and setters omitted for brevity\n`;
+                snippet += `}\n`;
+                break;
+        }
+
+        document.getElementById('code-snippet-content').textContent = snippet;
+        document.getElementById('snippet-copy-btn').dataset.text = snippet;
+        }
+    </script>
+</body>
+
+</html>

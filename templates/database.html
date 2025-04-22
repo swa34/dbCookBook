@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ database }} - DB Cookbook</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        .schema-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            height: 100%;
+        }
+
+        .schema-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: none;
+        }
+
+        .schema-icon {
+            font-size: 2rem;
+            color: #6c757d;
+        }
+
+        .system-schema-icon {
+            color: #dc3545;
+        }
+
+        .stats-badge {
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+        }
+
+        .system-badge {
+            background-color: #dc3545;
+        }
+
+        .system-schema-card {
+            border-color: #dc3545;
+            opacity: 0.8;
+        }
+
+        .system-schema-card:hover {
+            opacity: 1;
+        }
+
+        /* Toggle switch styling */
+        .form-switch .form-check-input {
+            width: 3em;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-server"></i> DB Cookbook
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Databases</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="#">{{ database }}</a>
+                    </li>
+                </ul>
+                <form class="d-flex ms-auto" action="/search" method="get">
+                    <div class="input-group">
+                        <input type="text" name="q" class="form-control" placeholder="Search all databases..."
+                            aria-label="Search">
+                        <button class="btn btn-outline-primary" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">Databases</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ database }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="mb-0"><i class="bi bi-database"></i> {{ database }}</h1>
+                <p class="text-muted">Select a schema to explore its tables and views</p>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <div class="form-check form-switch me-3">
+                    <input class="form-check-input" type="checkbox" id="showSystemToggle" {% if show_system %}checked{%
+                        endif %}>
+                    <label class="form-check-label" for="showSystemToggle">Show System Schemas</label>
+                </div>
+
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#diagramModal">
+                    <i class="bi bi-diagram-3"></i> Database Diagram
+                </button>
+            </div>
+        </div>
+
+        <!-- User schemas first -->
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for schema in schemas %}
+            {% if not schema_stats[schema].is_system %}
+            <div class="col">
+                <div class="card schema-card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-folder schema-icon"></i>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a href="/database/{{ database }}/schema/{{ schema }}"
+                                class="text-decoration-none stretched-link">{{ schema }}</a>
+                        </h5>
+                        <div class="mt-3">
+                            {% if schema_stats[schema].tables %}
+                            <span class="badge bg-info text-dark stats-badge">
+                                <i class="bi bi-table"></i> {{ schema_stats[schema].tables }} tables
+                            </span>
+                            {% endif %}
+
+                            {% if schema_stats[schema].views %}
+                            <span class="badge bg-success stats-badge">
+                                <i class="bi bi-eye"></i> {{ schema_stats[schema].views }} views
+                            </span>
+                            {% endif %}
+
+                            {% if schema_stats[schema].error is defined %}
+                            <span class="badge bg-danger stats-badge">
+                                <i class="bi bi-exclamation-triangle"></i> Error
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0">
+                        <div class="d-grid gap-2">
+                            <a href="/database/{{ database }}/schema/{{ schema }}"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-box-arrow-in-right"></i> Explore
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- System schemas section (conditionally displayed) -->
+        <div id="systemSchemasSection" class="mt-5" {% if not show_system %}style="display:none" {% endif %}>
+            <h3 class="mb-3">
+                <span class="badge system-badge"><i class="bi bi-gear"></i> System Schemas</span>
+            </h3>
+
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                {% for schema in schemas %}
+                {% if schema_stats[schema].is_system %}
+                <div class="col">
+                    <div class="card schema-card system-schema-card h-100">
+                        <div class="card-header">
+                            <i class="bi bi-gear schema-icon system-schema-icon"></i>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <a href="/database/{{ database }}/schema/{{ schema }}"
+                                    class="text-decoration-none stretched-link">{{ schema }}</a>
+                                <span class="badge system-badge ms-2">System</span>
+                            </h5>
+                            <div class="mt-3">
+                                {% if schema_stats[schema].tables %}
+                                <span class="badge bg-info text-dark stats-badge">
+                                    <i class="bi bi-table"></i> {{ schema_stats[schema].tables }} tables
+                                </span>
+                                {% endif %}
+
+                                {% if schema_stats[schema].views %}
+                                <span class="badge bg-success stats-badge">
+                                    <i class="bi bi-eye"></i> {{ schema_stats[schema].views }} views
+                                </span>
+                                {% endif %}
+
+                                {% if schema_stats[schema].error is defined %}
+                                <span class="badge bg-danger stats-badge">
+                                    <i class="bi bi-exclamation-triangle"></i> Error
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0">
+                            <div class="d-grid gap-2">
+                                <a href="/database/{{ database }}/schema/{{ schema }}"
+                                    class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-box-arrow-in-right"></i> Explore
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Empty state if no schemas -->
+        {% if schemas|length == 0 %}
+        <div class="text-center py-5">
+            <i class="bi bi-folder-x" style="font-size: 4rem; color: #6c757d;"></i>
+            <p class="lead mt-3">No schemas found in this database.</p>
+            <p class="text-muted">This database might be empty or you may not have sufficient permissions.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Database Diagram Modal -->
+    <div class="modal fade" id="diagramModal" tabindex="-1" aria-labelledby="diagramModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="diagramModalLabel">{{ database }} - Database Diagram</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center py-3 mb-3">
+                        <div class="form-check form-switch d-inline-block me-3">
+                            <input class="form-check-input" type="checkbox" id="diagramShowSystemToggle" {% if
+                                show_system %}checked{% endif %}>
+                            <label class="form-check-label" for="diagramShowSystemToggle">Show System Schemas</label>
+                        </div>
+
+                        <select id="diagram-schema-selector" class="form-select d-inline-block w-auto">
+                            <option value="">All Schemas</option>
+                            {% for schema in schemas %}
+                            <option value="{{ schema }}">{{ schema }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="diagram-container" style="height: 70vh; border: 1px solid #ddd; border-radius: 4px;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer mt-auto py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">DB Cookbook - A database exploration tool</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.2/d3.min.js"></script>
+    <script>
+        // Toggle system schemas display
+        const showSystemToggle = document.getElementById('showSystemToggle');
+        const systemSchemasSection = document.getElementById('systemSchemasSection');
+
+        showSystemToggle.addEventListener('change', function () {
+            if (this.checked) {
+                systemSchemasSection.style.display = 'block';
+            } else {
+                systemSchemasSection.style.display = 'none';
+            }
+
+            // Update URL with the new setting
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('show_system', this.checked);
+            window.history.replaceState({}, '', currentUrl);
+        });
+
+        // ER Diagram
+        const diagramModal = document.getElementById('diagramModal');
+        const diagramSchemaSelector = document.getElementById('diagram-schema-selector');
+        const diagramShowSystemToggle = document.getElementById('diagramShowSystemToggle');
+
+        diagramModal.addEventListener('shown.bs.modal', function () {
+            loadERDiagram(diagramSchemaSelector.value, diagramShowSystemToggle.checked);
+        });
+
+        diagramSchemaSelector.addEventListener('change', function () {
+            loadERDiagram(this.value, diagramShowSystemToggle.checked);
+        });
+
+        diagramShowSystemToggle.addEventListener('change', function () {
+            loadERDiagram(diagramSchemaSelector.value, this.checked);
+        });
+
+        function loadERDiagram(schema, showSystem) {
+            const container = document.getElementById('diagram-container');
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading diagram...</p>
+                </div>
+            `;
+
+            fetch(`/api/relationships/{{ database }}/${schema}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.nodes || data.nodes.length === 0) {
+                        container.innerHTML = `
+                            <div class="alert alert-info text-center">
+                                <i class="bi bi-info-circle-fill"></i> 
+                                No tables with relationships found in this database${schema ? ' and schema' : ''}.
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Filter out system schemas if not showing them
+                    if (!showSystem) {
+                        data.nodes = data.nodes.filter(node => !node.is_system);
+
+                        // Filter links to only include nodes that are still present
+                        const nodeIds = data.nodes.map(node => node.id);
+                        data.links = data.links.filter(link =>
+                            nodeIds.includes(link.source) && nodeIds.includes(link.target)
+                        );
+                    }
+
+                    // Verify we still have nodes after filtering
+                    if (data.nodes.length === 0) {
+                        container.innerHTML = `
+                            <div class="alert alert-info text-center">
+                                <i class="bi bi-info-circle-fill"></i> 
+                                No tables with relationships found (system schemas are hidden).
+                                <button class="btn btn-sm btn-outline-primary ms-3" id="showSystemDiagramBtn">
+                                    Show System Schemas
+                                </button>
+                            </div>
+                        `;
+
+                        document.getElementById('showSystemDiagramBtn').addEventListener('click', function () {
+                            diagramShowSystemToggle.checked = true;
+                            loadERDiagram(schema, true);
+                        });
+
+                        return;
+                    }
+
+                    renderERDiagram(container, data);
+                })
+                .catch(error => {
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill"></i> 
+                            Error loading diagram: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+
+        function renderERDiagram(container, data) {
+            // Clear container
+            container.innerHTML = '';
+
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Create SVG
+            const svg = d3.select(container)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("viewBox", [0, 0, width, height]);
+
+            // Create a container group for the diagram
+            const g = svg.append("g");
+
+            // Add zoom behavior
+            svg.call(d3.zoom()
+                .extent([[0, 0], [width, height]])
+                .scaleExtent([0.1, 4])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                }));
+
+            // Create a force simulation
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links)
+                    .id(d => d.id)
+                    .distance(200))
+                .force("charge", d3.forceManyBody().strength(-1000))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", d3.forceX(width / 2).strength(0.1))
+                .force("y", d3.forceY(height / 2).strength(0.1));
+
+            // Draw links first (so they're behind nodes)
+            const link = g.append("g")
+                .selectAll("path")
+                .data(data.links)
+                .join("path")
+                .attr("stroke", "#999")
+                .attr("stroke-opacity", 0.6)
+                .attr("stroke-width", 1.5)
+                .attr("fill", "none")
+                .attr("marker-end", "url(#arrow)");
+
+            // Create arrow marker
+            svg.append("defs").append("marker")
+                .attr("id", "arrow")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 25)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("fill", "#999")
+                .attr("d", "M0,-5L10,0L0,5");
+
+            // Create link labels
+            const linkLabels = g.append("g")
+                .selectAll("text")
+                .data(data.links)
+                .join("text")
+                .attr("font-size", 10)
+                .attr("fill", "#666")
+                .text(d => `${d.sourceColumn} → ${d.targetColumn}`);
+
+            // Draw nodes
+            const node = g.append("g")
+                .selectAll("g")
+                .data(data.nodes)
+                .join("g")
+                .call(drag(simulation));
+
+            // Node rects (tables)
+            node.append("rect")
+                .attr("rx", 6)
+                .attr("ry", 6)
+                .attr("width", 200)
+                .attr("height", 40)
+                .attr("fill", d => d.is_system ? "#f8d7da" : "#f8f9fa")
+                .attr("stroke", d => d.is_system ? "#dc3545" : "#0d6efd")
+                .attr("stroke-width", 2);
+
+            // Node text (table names)
+            node.append("text")
+                .attr("x", 100)
+                .attr("y", 25)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("font-weight", "bold")
+                .attr("font-size", 12)
+                .attr("fill", d => d.is_system ? "#dc3545" : "#000")
+                .text(d => d.id);
+
+            // Update positions on tick
+            simulation.on("tick", () => {
+                // Position links with curved paths
+                link.attr("d", d => {
+                    const dx = d.target.x - d.source.x,
+                        dy = d.target.y - d.source.y,
+                        dr = Math.sqrt(dx * dx + dy * dy);
+
+                    // Adjust source and target points based on rectangle dimensions
+                    const sourceX = d.source.x + 100; // Center of source rectangle
+                    const sourceY = d.source.y + 20; // Center of source rectangle
+                    const targetX = d.target.x + 100; // Center of target rectangle
+                    const targetY = d.target.y + 20; // Center of target rectangle
+
+                    return `M ${sourceX} ${sourceY} A ${dr} ${dr} 0 0 1 ${targetX} ${targetY}`;
+                });
+
+                // Position link labels in the middle of links
+                linkLabels.attr("x", d => (d.source.x + d.target.x) / 2 + 100)
+                    .attr("y", d => (d.source.y + d.target.y) / 2 + 20);
+
+                // Position nodes
+                node.attr("transform", d => `translate(${d.x}, ${d.y})`);
+            });
+
+            // Drag behavior for nodes
+            function drag(simulation) {
+                function dragstarted(event) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    event.subject.fx = event.subject.x;
+                    event.subject.fy = event.subject.y;
+                }
+
+                function dragged(event) {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+
+                function dragended(event) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    event.subject.fx = null;
+                    event.subject.fy = null;
+                }
+
+                return d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended);
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ database }}.{{ schema }} - DB Cookbook</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        .table-responsive {
+            max-height: 70vh;
+        }
+
+        .small {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .icon-table {
+            color: #0d6efd;
+        }
+
+        .icon-view {
+            color: #198754;
+        }
+
+        .badge-pill {
+            border-radius: 10rem;
+            padding: 0.25em 0.6em;
+            font-size: 75%;
+        }
+
+        .sortable {
+            cursor: pointer;
+        }
+
+        .sortable:after {
+            content: " ↕";
+            opacity: 0.5;
+        }
+
+        .sortable.asc:after {
+            content: " ↑";
+            opacity: 1;
+        }
+
+        .sortable.desc:after {
+            content: " ↓";
+            opacity: 1;
+        }
+
+        .fk-link {
+            font-size: 0.85em;
+            color: #0d6efd;
+            text-decoration: none;
+        }
+
+        .system-schema-alert {
+            border-left: 4px solid #dc3545;
+        }
+
+        .system-badge {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-server"></i> DB Cookbook
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Databases</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/database/{{ database }}">{{ database }}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="#">{{ schema }}</a>
+                    </li>
+                </ul>
+                <form class="d-flex ms-auto" action="/search" method="get">
+                    <div class="input-group">
+                        <input type="text" name="q" class="form-control" placeholder="Search all databases..."
+                            aria-label="Search">
+                        <button class="btn btn-outline-primary" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">Databases</a></li>
+                <li class="breadcrumb-item"><a href="/database/{{ database }}">{{ database }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ schema }}</li>
+            </ol>
+        </nav>
+
+        {% if is_system %}
+        <div class="alert alert-warning system-schema-alert mb-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>
+                    <strong>This is a system schema</strong>
+                    <p class="mb-0">System schemas contain SQL Server's internal objects that are generally not modified
+                        directly. Be cautious when interacting with these objects.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="mb-0">
+                    {% if is_system %}
+                    <i class="bi bi-gear text-danger"></i>
+                    {% else %}
+                    <i class="bi bi-folder"></i>
+                    {% endif %}
+                    {{ schema }}
+                    {% if is_system %}
+                    <span class="badge system-badge">System</span>
+                    {% endif %}
+                </h1>
+                <p class="text-muted">
+                    {% if is_system %}
+                    Explore system tables and views in this schema
+                    {% else %}
+                    Explore tables and views in this schema
+                    {% endif %}
+                </p>
+            </div>
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#diagramModal">
+                    <i class="bi bi-diagram-3"></i> Schema Diagram
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <form method="get" class="row g-3 flex-grow-1">
+                    <div class="col-md-4">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" name="q" placeholder="Search objects or columns..."
+                                value="{{ query|e }}">
+                        </div>
+                    </div>
+
+                    <div class="col-md-2">
+                        <select name="type" class="form-select">
+                            <option value="">All Types</option>
+                            <option value="Table" {% if selected_type=='Table' %}selected{% endif %}>Tables</option>
+                            <option value="View" {% if selected_type=='View' %}selected{% endif %}>Views</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    </div>
+
+                    <input type="hidden" name="sort" value="{{ sort_by }}">
+                    <input type="hidden" name="dir" value="{{ sort_dir }}">
+                    <input type="hidden" name="page" value="{{ current_page }}">
+                </form>
+
+                <span class="badge bg-secondary ms-2">{{ total_items }} objects</span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="sticky-top bg-light">
+                        <tr>
+                            <th class="sortable {{ 'asc' if sort_by == 'type' and sort_dir == 'asc' else 'desc' if sort_by == 'type' and sort_dir == 'desc' else '' }}"
+                                data-sort="type">Type</th>
+                            <th class="sortable {{ 'asc' if sort_by == 'name' and sort_dir == 'asc' else 'desc' if sort_by == 'name' and sort_dir == 'desc' else '' }}"
+                                data-sort="name">Name</th>
+                            <th>Columns</th>
+                            <th>Relationships</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for obj in objects%}
+                        <tr>
+                            <td>
+                                {% if obj.obj_type == 'Table' %}
+                                <i class="bi bi-table icon-table"></i>
+                                {% else %}
+                                <i class="bi bi-eye icon-view"></i>
+                                {% endif %}
+                                {{ obj.obj_type }}
+                            </td>
+                            <td>
+                                <a href="/details/{{ obj.database }}/{{ obj.schema }}/{{ obj.name }}"
+                                    class="fw-bold text-decoration-none">
+                                    {{ obj.name }}
+                                </a>
+
+                                {% if obj.is_system %}
+                                <span class="badge bg-secondary ms-1" title="This is a system object">S</span>
+                                {% endif %}
+
+                                <div class="small text-muted">
+                                    {% if obj.primary_key and obj.primary_key|length > 0 %}
+                                    <div><strong>PK:</strong> {{ obj.primary_key|join(", ") }}</div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="small">
+                                {% for col in obj.columns[:5] %}
+                                <span class="badge bg-light text-dark">{{ col }}</span>
+                                {% endfor %}
+                                {% if obj.columns|length > 5 %}
+                                <span class="badge bg-secondary">+{{ obj.columns|length - 5 }} more</span>
+                                {% endif %}
+                            </td>
+                            <td class="small">
+                                {% if obj.obj_type == 'Table' and obj.foreign_keys %}
+                                {% for fk in obj.foreign_keys %}
+                                <div class="mb-1">
+                                    <span class="badge bg-light text-dark">{{ fk.column }}</span>
+                                    <i class="bi bi-arrow-right"></i>
+                                    <a href="/details/{{ obj.database }}/{{ fk.referenced_table.split('.')[0] }}/{{ fk.referenced_table.split('.')[1] }}"
+                                        class="fk-link">
+                                        {{ fk.referenced_table }}.{{ fk.referenced_column }}
+                                    </a>
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <span class="text-muted">&mdash;</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary btn-sm view-data"
+                                        data-db="{{ obj.database }}" data-schema="{{ obj.schema }}"
+                                        data-table="{{ obj.name }}">
+                                        <i class="bi bi-table"></i> Data
+                                    </button>
+                                    <a href="/details/{{ obj.database }}/{{ obj.schema }}/{{ obj.name }}"
+                                        class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-info-circle"></i> Details
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if objects|length == 0 %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4">
+                                <i class="bi bi-exclamation-circle text-secondary fs-3 d-block mb-2"></i>
+                                <em>No objects found matching your criteria.</em>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        Showing {{ objects|length }} of {{ total_items }} items
+                    </div>
+
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item {{ 'disabled' if current_page == 1 else '' }}">
+                                <a class="page-link"
+                                    href="{{ '?' + request.query_string.decode().replace('page='+current_page|string, 'page='+((current_page-1)|string)) }}"
+                                    aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+
+                            {% for p in range(1, total_pages + 1) %}
+                            <li class="page-item {{ 'active' if p == current_page else '' }}">
+                                <a class="page-link"
+                                    href="{{ '?' + request.query_string.decode().replace('page='+current_page|string, 'page='+p|string) }}">{{
+                                    p }}</a>
+                            </li>
+                            {% endfor %}
+
+                            <li
+                                class="page-item {{ 'disabled' if current_page == total_pages or total_pages == 0 else '' }}">
+                                <a class="page-link"
+                                    href="{{ '?' + request.query_string.decode().replace('page='+current_page|string, 'page='+((current_page+1)|string)) }}"
+                                    aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Preview Modal -->
+    <div class="modal fade" id="dataModal" tabindex="-1" aria-labelledby="dataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dataModalLabel">Data Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="data-preview-content">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading data...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ER Diagram Modal -->
+    <div class="modal fade" id="diagramModal" tabindex="-1" aria-labelledby="diagramModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="diagramModalLabel">{{ database }}.{{ schema }} - Schema Diagram</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="diagram-container" style="height: 70vh; border: 1px solid #ddd; border-radius: 4px;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer mt-auto py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">DB Cookbook - A database exploration tool</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.2/d3.min.js"></script>
+    <script>
+        // Sorting
+        document.querySelectorAll('th.sortable').forEach(header => {
+            header.addEventListener('click', function () {
+                const sort = this.dataset.sort;
+                const currentDir = this.classList.contains('asc') ? 'desc' : 'asc';
+
+                document.querySelector('input[name="sort"]').value = sort;
+                document.querySelector('input[name="dir"]').value = currentDir;
+                document.querySelector('form').submit();
+            });
+        });
+
+        // Data Preview Modal
+        const dataModal = document.getElementById('dataModal');
+        const bsDataModal = new bootstrap.Modal(dataModal);
+
+        document.querySelectorAll('.view-data').forEach(button => {
+            button.addEventListener('click', function () {
+                const db = this.dataset.db;
+                const schema = this.dataset.schema;
+                const table = this.dataset.table;
+
+                document.getElementById('dataModalLabel').textContent = `Data Preview: ${schema}.${table}`;
+                const previewContainer = dataModal.querySelector('.data-preview-content');
+                previewContainer.innerHTML = `
+                                            <div class="text-center py-5">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                                <p class="mt-2">Loading data...</p>
+                                            </div>
+                                        `;
+
+                bsDataModal.show();
+
+                fetch(`/api/sample-data/${db}/${schema}/${table}?limit=10`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            previewContainer.innerHTML = `
+                                                        <div class="alert alert-danger">
+                                                            <i class="bi bi-exclamation-triangle-fill"></i> 
+                                                            Error loading data: ${data.error}
+                                                        </div>
+                                                    `;
+                            return;
+                        }
+
+                        if (!data.columns || !data.data || data.data.length === 0) {
+                            previewContainer.innerHTML = `
+                                                        <div class="alert alert-info">
+                                                            <i class="bi bi-info-circle-fill"></i> 
+                                                            No data available or empty table.
+                                                        </div>
+                                                    `;
+                            return;
+                        }
+
+                        let tableHtml = `
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped table-bordered table-sm">
+                                                            <thead>
+                                                                <tr>
+                                                                    ${data.columns.map(col => `<th>${col}</th>`).join('')}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                `;
+
+                        data.data.forEach(row => {
+                            tableHtml += '<tr>';
+                            data.columns.forEach(col => {
+                                const value = row[col] === null ? '<em class="text-muted">NULL</em>' : row[col];
+                                tableHtml += `<td>${value}</td>`;
+                            });
+                            tableHtml += '</tr>';
+                        });
+
+                        tableHtml += `
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div class="mt-2 small text-muted">
+                                                        <i class="bi bi-info-circle"></i> Showing up to 10 rows. 
+                                                    </div>
+                                                `;
+
+                        previewContainer.innerHTML = tableHtml;
+                    })
+                    .catch(error => {
+                        previewContainer.innerHTML = `
+                                                    <div class="alert alert-danger">
+                                                        <i class="bi bi-exclamation-triangle-fill"></i> 
+                                                        Error: ${error.message}
+                                                    </div>
+                                                `;
+                    });
+            });
+        });
+
+        // ER Diagram
+        const diagramModal = document.getElementById('diagramModal');
+
+        diagramModal.addEventListener('shown.bs.modal', function () {
+            loadERDiagram();
+        });
+
+        function loadERDiagram() {
+            const container = document.getElementById('diagram-container');
+            container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading diagram...</p>
+        </div>
+    `;
+
+            fetch(`/api/relationships/{{ database }}/{{ schema }}`)
+                .then(response => {
+                    // Check if response is actually JSON
+                    const contentType = response.headers.get("content-type");
+                    if (!contentType || !contentType.includes("application/json")) {
+                        throw new Error("Server returned non-JSON response. Try selecting a specific schema instead of 'All Schemas'.");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    if (!data.nodes || data.nodes.length === 0) {
+                        container.innerHTML = `
+                    <div class="alert alert-info text-center">
+                        <i class="bi bi-info-circle-fill"></i> 
+                        No tables with relationships found in this schema.
+                    </div>
+                `;
+                        return;
+                    }
+
+                    renderERDiagram(container, data);
+                })
+                .catch(error => {
+                    container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 
+                    Error loading diagram: ${error.message}
+                    <div class="mt-2">
+                        <p>Tip: For large databases, select a specific schema rather than "All Schemas".</p>
+                    </div>
+                </div>
+            `;
+                });
+        }
+
+        function renderERDiagram(container, data) {
+            // Clear container
+            container.innerHTML = '';
+
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Create SVG
+            const svg = d3.select(container)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .attr("viewBox", [0, 0, width, height]);
+
+            // Create a container group for the diagram
+            const g = svg.append("g");
+
+            // Add zoom behavior
+            svg.call(d3.zoom()
+                .extent([[0, 0], [width, height]])
+                .scaleExtent([0.1, 4])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                }));
+
+            // Create a force simulation
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links)
+                    .id(d => d.id)
+                    .distance(200))
+                .force("charge", d3.forceManyBody().strength(-1000))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", d3.forceX(width / 2).strength(0.1))
+                .force("y", d3.forceY(height / 2).strength(0.1));
+
+            // Draw links first (so they're behind nodes)
+            const link = g.append("g")
+                .selectAll("path")
+                .data(data.links)
+                .join("path")
+                .attr("stroke", "#999")
+                .attr("stroke-opacity", 0.6)
+                .attr("stroke-width", 1.5)
+                .attr("fill", "none")
+                .attr("marker-end", "url(#arrow)");
+
+            // Create arrow marker
+            svg.append("defs").append("marker")
+                .attr("id", "arrow")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 25)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("fill", "#999")
+                .attr("d", "M0,-5L10,0L0,5");
+
+            // Create link labels
+            const linkLabels = g.append("g")
+                .selectAll("text")
+                .data(data.links)
+                .join("text")
+                .attr("font-size", 10)
+                .attr("fill", "#666")
+                .text(d => `${d.sourceColumn} → ${d.targetColumn}`);
+
+            // Draw nodes
+            const node = g.append("g")
+                .selectAll("g")
+                .data(data.nodes)
+                .join("g")
+                .call(drag(simulation));
+
+            // Node rects (tables)
+            node.append("rect")
+                .attr("rx", 6)
+                .attr("ry", 6)
+                .attr("width", 200)
+                .attr("height", 40)
+                .attr("fill", d => d.is_system ? "#f8d7da" : "#f8f9fa")
+                .attr("stroke", d => d.is_system ? "#dc3545" : "#0d6efd")
+                .attr("stroke-width", 2);
+
+            // Node text (table names)
+            node.append("text")
+                .attr("x", 100)
+                .attr("y", 25)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("font-weight", "bold")
+                .attr("font-size", 12)
+                .attr("fill", d => d.is_system ? "#dc3545" : "#000")
+                .text(d => d.id);
+
+            // Update positions on tick
+            simulation.on("tick", () => {
+                // Position links with curved paths
+                link.attr("d", d => {
+                    const dx = d.target.x - d.source.x,
+                        dy = d.target.y - d.source.y,
+                        dr = Math.sqrt(dx * dx + dy * dy);
+
+                    // Adjust source and target points based on rectangle dimensions
+                    const sourceX = d.source.x + 100; // Center of source rectangle
+                    const sourceY = d.source.y + 20; // Center of source rectangle
+                    const targetX = d.target.x + 100; // Center of target rectangle
+                    const targetY = d.target.y + 20; // Center of target rectangle
+
+                    return `M ${sourceX} ${sourceY} A ${dr} ${dr} 0 0 1 ${targetX} ${targetY}`;
+                });
+
+                // Position link labels in the middle of links
+                linkLabels.attr("x", d => (d.source.x + d.target.x) / 2 + 100)
+                    .attr("y", d => (d.source.y + d.target.y) / 2 + 20);
+
+                // Position nodes
+                node.attr("transform", d => `translate(${d.x}, ${d.y})`);
+            });
+
+            // Drag behavior for nodes
+            function drag(simulation) {
+                function dragstarted(event) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    event.subject.fx = event.subject.x;
+                    event.subject.fy = event.subject.y;
+                }
+
+                function dragged(event) {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+
+                function dragended(event) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    event.subject.fx = null;
+                    event.subject.fy = null;
+                }
+
+                return d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended);
+            }
+        }
+    </script>
+</body>
+
+</html>
