@@ -490,28 +490,30 @@ def api_sample_data(db, schema, table):
     return jsonify(data)
 
 
-@app.route("/api/relationships/<db>/<schema>")
+@app.route("/api/relationships/<db>/", defaults={"schema": ""})
 def api_relationships(db, schema):
-    """Return relationship data in a format suitable for visualization"""
+    """Return relationship data for visualization"""
     try:
-        # Limit the response size if no specific schema is selected
-        if not schema or schema == "":
-            # For "All Schemas", limit to non-system schemas only
+        # If schema is specified, get objects for that schema
+        if schema and schema != "":
+            objects = list_objects_by_schema(db, schema)
+        else:
+            # For database-level diagram, get non-system objects from all schemas
             objects = []
             schemas = list_schemas(db, include_system_schemas=False)
-            for single_schema in schemas[
-                :5
-            ]:  # Limit to first 5 schemas for performance
-                objects.extend(list_objects_by_schema(db, single_schema))
-        else:
-            # For a specific schema, get all objects
-            objects = list_objects_by_schema(db, schema)
+            for single_schema in schemas:
+                schema_objects = list_objects_by_schema(db, single_schema)
+                # Only include non-system objects
+                objects.extend([obj for obj in schema_objects if not obj["is_system"]])
 
+        # Filter to tables only
         db_objects = [obj for obj in objects if obj["obj_type"] == "Table"]
 
-        # Limit to maximum of 50 tables for diagram clarity
-        if len(db_objects) > 50:
-            db_objects = db_objects[:50]
+        # If too many tables, limit for performance
+        if len(db_objects) > 75:
+            db_objects = sorted(
+                db_objects, key=lambda obj: len(obj["foreign_keys"]), reverse=True
+            )[:75]
 
         nodes = []
         links = []
@@ -528,16 +530,22 @@ def api_relationships(db, schema):
             )
 
         # Create links for foreign keys
+        node_ids = set(node["id"] for node in nodes)
         for obj in db_objects:
             for fk in obj["foreign_keys"]:
-                links.append(
-                    {
-                        "source": f"{obj['schema']}.{obj['name']}",
-                        "target": fk["referenced_table"],
-                        "sourceColumn": fk["column"],
-                        "targetColumn": fk["referenced_column"],
-                    }
-                )
+                # Only include links if both source and target are in our nodes
+                if (
+                    obj["schema"] + "." + obj["name"] in node_ids
+                    and fk["referenced_table"] in node_ids
+                ):
+                    links.append(
+                        {
+                            "source": f"{obj['schema']}.{obj['name']}",
+                            "target": fk["referenced_table"],
+                            "sourceColumn": fk["column"],
+                            "targetColumn": fk["referenced_column"],
+                        }
+                    )
 
         return jsonify({"nodes": nodes, "links": links})
     except Exception as e:

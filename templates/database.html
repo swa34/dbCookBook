@@ -110,7 +110,7 @@
                 </div>
 
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#diagramModal">
-                    <i class="bi bi-diagram-3"></i> Database Diagram
+                    <i class="bi bi-diagram-3"></i> {{ database }} Diagram
                 </button>
             </div>
         </div>
@@ -306,28 +306,42 @@
         function loadERDiagram(schema, showSystem) {
             const container = document.getElementById('diagram-container');
             container.innerHTML = `
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Loading diagram...</p>
-                </div>
-            `;
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading diagram...</p>
+        </div>
+    `;
 
-            fetch(`/api/relationships/{{ database }}/${schema}`)
-                .then(response => response.json())
+            // Use proper URL formatting for the API call - note the trailing slash when schema is empty
+            const apiUrl = schema ?
+                `/api/relationships/{{ database }}/${schema}` :
+                `/api/relationships/{{ database }}/`;
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
                     if (!data.nodes || data.nodes.length === 0) {
                         container.innerHTML = `
-                            <div class="alert alert-info text-center">
-                                <i class="bi bi-info-circle-fill"></i> 
-                                No tables with relationships found in this database${schema ? ' and schema' : ''}.
-                            </div>
-                        `;
+                    <div class="alert alert-info text-center">
+                        <i class="bi bi-info-circle-fill"></i> 
+                        No tables with relationships found in ${schema ? 'schema ' + schema : 'this database'}.
+                    </div>
+                `;
                         return;
                     }
 
-                    // Filter out system schemas if not showing them
+                    // Limit to non-system tables if not showing system
                     if (!showSystem) {
                         data.nodes = data.nodes.filter(node => !node.is_system);
 
@@ -338,35 +352,36 @@
                         );
                     }
 
-                    // Verify we still have nodes after filtering
                     if (data.nodes.length === 0) {
                         container.innerHTML = `
-                            <div class="alert alert-info text-center">
-                                <i class="bi bi-info-circle-fill"></i> 
-                                No tables with relationships found (system schemas are hidden).
-                                <button class="btn btn-sm btn-outline-primary ms-3" id="showSystemDiagramBtn">
-                                    Show System Schemas
-                                </button>
-                            </div>
-                        `;
-
-                        document.getElementById('showSystemDiagramBtn').addEventListener('click', function () {
-                            diagramShowSystemToggle.checked = true;
-                            loadERDiagram(schema, true);
-                        });
-
+                    <div class="alert alert-info text-center">
+                        <i class="bi bi-info-circle-fill"></i> 
+                        No tables with relationships found (system tables are hidden).
+                    </div>
+                `;
                         return;
                     }
 
-                    renderERDiagram(container, data);
+                    // Add an info message about what's being shown
+                    container.innerHTML = `
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    Showing ${data.nodes.length} tables with ${data.links.length} relationships
+                    ${schema ? 'from schema ' + schema : 'from database ' + '{{ database }}'}.
+                    ${data.nodes.length >= 75 ? ' (Limited to 75 tables for clarity)' : ''}
+                </div>
+                <div id="diagram-svg-container" style="height: calc(70vh - 60px); border: 1px solid #ddd; border-radius: 4px;"></div>
+            `;
+
+                    renderERDiagram(document.getElementById('diagram-svg-container'), data);
                 })
                 .catch(error => {
                     container.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-exclamation-triangle-fill"></i> 
-                            Error loading diagram: ${error.message}
-                        </div>
-                    `;
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 
+                    Error loading diagram: ${error.message}
+                </div>
+            `;
                 });
         }
 
